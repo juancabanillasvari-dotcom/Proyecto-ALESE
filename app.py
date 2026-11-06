@@ -5,7 +5,7 @@ import io
 st.set_page_config(page_title="Seguimiento de Unidades - ALESE", layout="wide")
 
 st.title("🚗 Control de Estado de Unidades — Cliente ALESE")
-st.markdown("Sube tu reporte nativo de Excel para obtener el estado clasificado, correlativo y ordenado por fecha de más antiguo a más actual.")
+st.markdown("Sube tu reporte nativo de Excel para obtener el estado clasificado, correlativo y ordenado estrictamente de más antiguo a más actual.")
 
 uploaded_file = st.file_uploader("Sube tu archivo Excel (ej. Automate_diario.xlsx)", type=["xlsx", "xls", "csv"])
 
@@ -48,7 +48,7 @@ if uploaded_file is not None:
 
         piv['Estado Vehiculo'] = piv.apply(evaluar_estado_unidad, axis=1)
 
-        # Asignar fecha cruda para ordenamiento estricto
+        # Asignar fecha cruda para ordenamiento estricto cronológico
         def asignar_fecha_raw(row):
             estado = row['Estado Vehiculo']
             if estado in ["EN COLA", "EN PROCESO"]:
@@ -68,7 +68,7 @@ if uploaded_file is not None:
 
         piv['Fecha'] = piv.apply(extraer_10_chars, axis=1)
 
-        # Ordenar estrictamente de menor a mayor (más antiguo arriba: ej. 29/10 antes que 05/11)
+        # Ordenamiento estricto: De más antiguo a más actual (ascendente)
         estado_order = {"FINALIZADO": 1, "EN PROCESO": 2, "EN COLA": 3}
         piv['Orden_Estado'] = piv['Estado Vehiculo'].map(estado_order)
         piv = piv.sort_values(by=['Orden_Estado', 'Fecha_Datetime'], ascending=[True, True])
@@ -87,33 +87,4 @@ if uploaded_file is not None:
 
         # Preparar dataframes con numeración correlativa N°
         df_fin = df_final[df_final['Estado Vehiculo'] == "FINALIZADO"].drop(columns=['Estado Vehiculo']).copy()
-        df_fin.insert(0, 'N°', range(1, len(df_fin) + 1))
-
-        df_proc = df_final[df_final['Estado Vehiculo'] == "EN PROCESO"].drop(columns=['Estado Vehiculo']).copy()
-        df_proc.insert(0, 'N°', range(1, len(df_proc) + 1))
-
-        df_cola = df_final[df_final['Estado Vehiculo'] == "EN COLA"].drop(columns=['Estado Vehiculo']).copy()
-        df_cola.insert(0, 'N°', range(1, len(df_cola) + 1))
-
-        st.subheader("🟢 Unidades Finalizadas")
-        st.dataframe(df_fin, use_container_width=True)
-
-        st.subheader("🟡 Unidades En Proceso")
-        st.dataframe(df_proc, use_container_width=True)
-
-        st.subheader("🔴 Unidades En Cola")
-        st.dataframe(df_cola, use_container_width=True)
-
-        # Generar Excel estructurado con 3 pestañas independientes para descarga
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df_fin.to_excel(writer, index=False, sheet_name='Finalizado')
-            df_proc.to_excel(writer, index=False, sheet_name='En Proceso')
-            df_cola.to_excel(writer, index=False, sheet_name='En Cola')
-
-        st.download_button(
-            label="📥 Descargar Reporte Excel Clasificado (.xlsx)",
-            data=output.getvalue(),
-            file_name="Reporte_Cliente_ALESE_Ordenado.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+        df_fin.insert(
