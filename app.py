@@ -48,7 +48,7 @@ if uploaded_file is not None:
 
         piv['Estado Vehiculo'] = piv.apply(evaluar_estado_unidad, axis=1)
 
-        # Asignar fecha cruda para ordenamiento estricto cronológico
+        # Asignar fecha cruda según estado
         def asignar_fecha_raw(row):
             estado = row['Estado Vehiculo']
             if estado in ["EN COLA", "EN PROCESO"]:
@@ -58,10 +58,10 @@ if uploaded_file is not None:
 
         piv['Fecha_Raw'] = piv.apply(asignar_fecha_raw, axis=1)
         
-        # Convertir a datetime interpretando primero el día (dayfirst=True) para orden cronológico real
+        # Conversión estricta a datetime interpretando el día primero (dayfirst=True) para garantizar orden ascendente real
         piv['Fecha_Datetime'] = pd.to_datetime(piv['Fecha_Raw'], errors='coerce', dayfirst=True)
 
-        # Extraer exactamente los 10 primeros caracteres del archivo nativo de izquierda a derecha para mostrar
+        # Extraer exactamente los 10 primeros caracteres del archivo nativo de izquierda a derecha
         def extraer_10_chars(row):
             val = row['Fecha_Raw']
             if pd.isna(val) or str(val).strip() in ["", "nan", "NaT", "None"]:
@@ -70,7 +70,7 @@ if uploaded_file is not None:
 
         piv['Fecha'] = piv.apply(extraer_10_chars, axis=1)
 
-        # Ordenamiento estrictamente de menor a mayor (más antiguo arriba, ej: 29/10 antes que 05/11)
+        # ORDENAMIENTO CRONOLÓGICO ESTRICTO: De más antiguo a más actual (ascendente por Fecha_Datetime)
         estado_order = {"FINALIZADO": 1, "EN PROCESO": 2, "EN COLA": 3}
         piv['Orden_Estado'] = piv['Estado Vehiculo'].map(estado_order)
         piv = piv.sort_values(by=['Orden_Estado', 'Fecha_Datetime'], ascending=[True, True])
