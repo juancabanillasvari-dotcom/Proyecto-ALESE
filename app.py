@@ -5,7 +5,7 @@ import io
 st.set_page_config(page_title="Seguimiento de Unidades - ALESE", layout="wide")
 
 st.title("🚗 Control de Estado de Unidades — Cliente ALESE")
-st.markdown("Sube tu reporte nativo de Excel para obtener el estado clasificado, correlativo y ordenado de más antiguo a más actual.")
+st.markdown("Sube tu reporte nativo de Excel para obtener el estado clasificado, correlativo y ordenado estrictamente de más antiguo a más actual.")
 
 uploaded_file = st.file_uploader("Sube tu archivo Excel (ej. Automate_diario.xlsx)", type=["xlsx", "xls", "csv"])
 
@@ -58,10 +58,10 @@ if uploaded_file is not None:
 
         piv['Fecha_Raw'] = piv.apply(asignar_fecha_raw, axis=1)
         
-        # Conversión a datetime interpretando el día primero (dayfirst=True) para orden cronológico estricto
+        # Conversión estricta a datetime para orden cronológico de más antiguo a más actual
         piv['Fecha_Datetime'] = pd.to_datetime(piv['Fecha_Raw'], errors='coerce', dayfirst=True)
 
-        # Extraer exactamente los 10 primeros caracteres del archivo nativo de izquierda a derecha
+        # Extraer los 10 primeros caracteres del archivo nativo
         def extraer_10_chars(row):
             val = row['Fecha_Raw']
             if pd.isna(val) or str(val).strip() in ["", "nan", "NaT", "None"]:
@@ -70,7 +70,7 @@ if uploaded_file is not None:
 
         piv['Fecha_Str'] = piv.apply(extraer_10_chars, axis=1)
 
-        # Ordenar de menor a mayor (más antiguo a más actual)
+        # Ordenar estrictamente de menor a mayor (más antiguo arriba)
         estado_order = {"FINALIZADO": 1, "EN PROCESO": 2, "EN COLA": 3}
         piv['Orden_Estado'] = piv['Estado Vehiculo'].map(estado_order)
         piv = piv.sort_values(by=['Orden_Estado', 'Fecha_Datetime'], ascending=[True, True])
@@ -84,9 +84,11 @@ if uploaded_file is not None:
         m4.metric("🔴 En Cola", (piv['Estado Vehiculo'] == "EN COLA").sum())
         st.markdown("---")
 
-        # Función para renderizar tablas HTML estilizadas y listas para copiar al correo
-        def render_styled_table(df_sub, col_fecha_name, header_color):
-            df_display = pd.DataFrame({
+        # Preparar DataFrames limpios con numeración correlativa N°
+        def build_clean_df(df_sub, col_fecha_title):
+            if df_sub.empty:
+                return pd.DataFrame(columns=['N°', 'Cliente', 'Almacen', 'Vin', 'Marca', 'Modelo', 'Color Vehiculo', col_fecha_title])
+            res = pd.DataFrame({
                 'N°': range(1, len(df_sub) + 1),
                 'Cliente': df_sub['Cliente'],
                 'Almacen': df_sub['Almacen'],
@@ -94,96 +96,31 @@ if uploaded_file is not None:
                 'Marca': df_sub['Marca'],
                 'Modelo': df_sub['Modelo'],
                 'Color Vehiculo': df_sub['Color Vehiculo'],
-                col_fecha_name: df_sub['Fecha_Str']
+                col_fecha_title: df_sub['Fecha_Str']
             })
+            return res
 
-            # HTML + CSS para formateo corporativo compatible con copia a Outlook/Gmail
-            html = f"""
-            <style>
-                .custom-table {{
-                    width: 100%;
-                    border-collapse: collapse;
-                    font-family: 'Calibri', 'Segoe UI', sans-serif;
-                    font-size: 13px;
-                    margin-bottom: 20px;
-                }}
-                .custom-table th {{
-                    background-color: {header_color};
-                    color: white;
-                    font-weight: bold;
-                    text-align: center;
-                    padding: 8px 12px;
-                    border: 1px solid #d9d9d9;
-                }}
-                .custom-table td {{
-                    padding: 6px 10px;
-                    border: 1px solid #d9d9d9;
-                }}
-                .custom-table tr:nth-child(even) {{
-                    background-color: #f9fafb;
-                }}
-                .center {{ text-align: center; }}
-                .left {{ text-align: left; }}
-            </style>
-            <table class="custom-table">
-                <thead>
-                    <tr>
-                        <th>N°</th>
-                        <th>Cliente</th>
-                        <th>Almacen</th>
-                        <th>Vin</th>
-                        <th>Marca</th>
-                        <th>Modelo</th>
-                        <th>Color Vehiculo</th>
-                        <th>{col_fecha_name}</th>
-                    </tr>
-                </thead>
-                <tbody>
-            """
-            for row in df_display.itertuples(index=False):
-                html += f"""
-                    <tr>
-                        <td class="center">{row[0]}</td>
-                        <td class="left">{row[1]}</td>
-                        <td class="left">{row[2]}</td>
-                        <td class="center"><b>{row[3]}</b></td>
-                        <td class="left">{row[4]}</td>
-                        <td class="left">{row[5]}</td>
-                        <td class="left">{row[6]}</td>
-                        <td class="center">{row[7]}</td>
-                    </tr>
-                """
-            html += "</tbody></table>"
-            return html, df_display
+        df_fin = build_clean_df(piv[piv['Estado Vehiculo'] == "FINALIZADO"], "Fecha Término")
+        df_proc = build_clean_df(piv[piv['Estado Vehiculo'] == "EN PROCESO"], "Fecha Ingreso")
+        df_cola = build_clean_df(piv[piv['Estado Vehiculo'] == "EN COLA"], "Fecha Ingreso")
 
-        # Separar por estados
-        df_fin_raw = piv[piv['Estado Vehiculo'] == "FINALIZADO"]
-        df_proc_raw = piv[piv['Estado Vehiculo'] == "EN PROCESO"]
-        df_cola_raw = piv[piv['Estado Vehiculo'] == "EN COLA"]
+        # Visualización nativa impecable en Streamlit
+        st.subheader("🟢 Unidades Finalizadas")
+        st.dataframe(df_fin, use_container_width=True, hide_index=True)
 
-        # Generar HTMLs estilizados
-        html_fin, df_fin_exp = render_styled_table(df_fin_raw, "Fecha Término", "#1F4E79")
-        html_proc, df_proc_exp = render_styled_table(df_proc_raw, "Fecha Ingreso", "#C65911")
-        html_cola, df_cola_exp = render_styled_table(df_cola_raw, "Fecha Ingreso", "#595959")
+        st.subheader("🟡 Unidades En Proceso")
+        st.dataframe(df_proc, use_container_width=True, hide_index=True)
 
-        # Mostrar en Streamlit
-        st.subheader("🟢 Unidades Finalizadas (Fecha Término)")
-        st.markdown(html_fin, unsafe_allow_html=True)
+        st.subheader("🔴 Unidades En Cola")
+        st.dataframe(df_cola, use_container_width=True, hide_index=True)
 
-        st.subheader("🟡 Unidades En Proceso (Fecha Ingreso)")
-        st.markdown(html_proc, unsafe_allow_html=True)
-
-        st.subheader("🔴 Unidades En Cola (Fecha Ingreso)")
-        st.markdown(html_cola, unsafe_allow_html=True)
-
-        # Generar Excel formateado profesionalmente con openpyxl
+        # Generar Excel estructurado con 3 pestañas profesionales
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df_fin_exp.to_excel(writer, index=False, sheet_name='Finalizado')
-            df_proc_exp.to_excel(writer, index=False, sheet_name='En Proceso')
-            df_cola_exp.to_excel(writer, index=False, sheet_name='En Cola')
+            df_fin.to_excel(writer, index=False, sheet_name='Finalizado')
+            df_proc.to_excel(writer, index=False, sheet_name='En Proceso')
+            df_cola.to_excel(writer, index=False, sheet_name='En Cola')
 
-            # Darle diseño profesional al Excel generado
             wb = writer.book
             headers_colors = {"Finalizado": "1F4E79", "En Proceso": "C65911", "En Cola": "595959"}
             import openpyxl.styles as opts
