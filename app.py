@@ -5,7 +5,7 @@ import io
 st.set_page_config(page_title="Seguimiento de Unidades - ALESE", layout="wide")
 
 st.title("🚗 Control de Estado de Unidades — Cliente ALESE")
-st.markdown("Sube tu reporte nativo de Excel para obtener el estado clasificado y correlativo de las unidades en almacén.")
+st.markdown("Sube tu reporte nativo de Excel para obtener el estado clasificado, correlativo y ordenado por fecha de más antiguo a más actual.")
 
 uploaded_file = st.file_uploader("Sube tu archivo Excel (ej. Automate_diario.xlsx)", type=["xlsx", "xls", "csv"])
 
@@ -16,6 +16,7 @@ if uploaded_file is not None:
         sheet_target = 'SeguimientoServicio' if 'SeguimientoServicio' in pd.ExcelFile(uploaded_file).sheet_names else 0
         df = pd.read_excel(uploaded_file, sheet_name=sheet_target)
 
+    # Filtrar solo cliente ALESE y unidades que NO estén RETIRADAS
     df_alese = df[
         (df['Cliente'].astype(str).str.contains('ALESE', case=False, na=False)) &
         (df['Ubicacion'].astype(str).str.upper() != 'RETIRADO')
@@ -47,23 +48,30 @@ if uploaded_file is not None:
 
         piv['Estado Vehiculo'] = piv.apply(evaluar_estado_unidad, axis=1)
 
-        # Tomar exactamente los 10 primeros caracteres de la cadena nativa original
-        def extraer_10_chars(row):
+        # Asignar fecha cruda para ordenamiento estricto
+        def asignar_fecha_raw(row):
             estado = row['Estado Vehiculo']
             if estado in ["EN COLA", "EN PROCESO"]:
-                val = row.get('Fecha Ingreso_PDI INICIAL COMPLETO', row.get('Fecha Ingreso_PDI FINAL', ''))
+                return row.get('Fecha Ingreso_PDI INICIAL COMPLETO', row.get('Fecha Ingreso_PDI FINAL', None))
             else:
-                val = row.get('Fecha Termino_PDI FINAL', row.get('Fecha Termino_PDI INICIAL COMPLETO', ''))
-            
+                return row.get('Fecha Termino_PDI FINAL', row.get('Fecha Termino_PDI INICIAL COMPLETO', None))
+
+        piv['Fecha_Raw'] = piv.apply(asignar_fecha_raw, axis=1)
+        piv['Fecha_Datetime'] = pd.to_datetime(piv['Fecha_Raw'], errors='coerce')
+
+        # Extraer exactamente los 10 primeros caracteres del archivo nativo de izquierda a derecha
+        def extraer_10_chars(row):
+            val = row['Fecha_Raw']
             if pd.isna(val) or str(val).strip() in ["", "nan", "NaT", "None"]:
                 return ""
             return str(val).strip()[:10]
 
         piv['Fecha'] = piv.apply(extraer_10_chars, axis=1)
 
+        # Ordenar estrictamente de menor a mayor (más antiguo arriba: ej. 29/10 antes que 05/11)
         estado_order = {"FINALIZADO": 1, "EN PROCESO": 2, "EN COLA": 3}
         piv['Orden_Estado'] = piv['Estado Vehiculo'].map(estado_order)
-        piv = piv.sort_values(by=['Orden_Estado', 'Fecha'], ascending=[True, True])
+        piv = piv.sort_values(by=['Orden_Estado', 'Fecha_Datetime'], ascending=[True, True])
 
         cols_export = ['Cliente', 'Almacen', 'Vin', 'Marca', 'Modelo', 'Color Vehiculo', 'Estado Vehiculo', 'Fecha']
         df_final = piv[cols_export]
@@ -96,7 +104,7 @@ if uploaded_file is not None:
         st.subheader("🔴 Unidades En Cola")
         st.dataframe(df_cola, use_container_width=True)
 
-        # Generar Excel estructurado con 3 pestañas para descarga
+        # Generar Excel estructurado con 3 pestañas independientes para descarga
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df_fin.to_excel(writer, index=False, sheet_name='Finalizado')
@@ -106,6 +114,6 @@ if uploaded_file is not None:
         st.download_button(
             label="📥 Descargar Reporte Excel Clasificado (.xlsx)",
             data=output.getvalue(),
-            file_name="Reporte_Cliente_ALESE_Correlativo.xlsx",
+            file_name="Reporte_Cliente_ALESE_Ordenado.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
