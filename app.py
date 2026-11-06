@@ -87,4 +87,33 @@ if uploaded_file is not None:
 
         # Preparar dataframes con numeración correlativa N°
         df_fin = df_final[df_final['Estado Vehiculo'] == "FINALIZADO"].drop(columns=['Estado Vehiculo']).copy()
-        df_fin.insert(
+        df_fin.insert(0, 'N°', range(1, len(df_fin) + 1))
+
+        df_proc = df_final[df_final['Estado Vehiculo'] == "EN PROCESO"].drop(columns=['Estado Vehiculo']).copy()
+        df_proc.insert(0, 'N°', range(1, len(df_proc) + 1))
+
+        df_cola = df_final[df_final['Estado Vehiculo'] == "EN COLA"].drop(columns=['Estado Vehiculo']).copy()
+        df_cola.insert(0, 'N°', range(1, len(df_cola) + 1))
+
+        st.subheader("🟢 Unidades Finalizadas")
+        st.dataframe(df_fin, use_container_width=True)
+
+        st.subheader("🟡 Unidades En Proceso")
+        st.dataframe(df_proc, use_container_width=True)
+
+        st.subheader("🔴 Unidades En Cola")
+        st.dataframe(df_cola, use_container_width=True)
+
+        # Generar Excel estructurado con 3 pestañas independientes para descarga
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df_fin.to_excel(writer, index=False, sheet_name='Finalizado')
+            df_proc.to_excel(writer, index=False, sheet_name='En Proceso')
+            df_cola.to_excel(writer, index=False, sheet_name='En Cola')
+
+        st.download_button(
+            label="📥 Descargar Reporte Excel Clasificado (.xlsx)",
+            data=output.getvalue(),
+            file_name="Reporte_Cliente_ALESE_Ordenado.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
