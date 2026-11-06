@@ -108,4 +108,14 @@ if uploaded_file is not None:
 
         # Generar Excel estructurado con 3 pestañas independientes para descarga
         output = io.BytesIO()
-        with pd.
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df_fin.to_excel(writer, index=False, sheet_name='Finalizado')
+            df_proc.to_excel(writer, index=False, sheet_name='En Proceso')
+            df_cola.to_excel(writer, index=False, sheet_name='En Cola')
+
+        st.download_button(
+            label="📥 Descargar Reporte Excel Clasificado (.xlsx)",
+            data=output.getvalue(),
+            file_name="Reporte_Cliente_ALESE_Ordenado.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
