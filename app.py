@@ -57,9 +57,11 @@ if uploaded_file is not None:
                 return row.get('Fecha Termino_PDI FINAL', row.get('Fecha Termino_PDI INICIAL COMPLETO', None))
 
         piv['Fecha_Raw'] = piv.apply(asignar_fecha_raw, axis=1)
-        piv['Fecha_Datetime'] = pd.to_datetime(piv['Fecha_Raw'], errors='coerce')
+        
+        # Convertir a datetime interpretando primero el día (dayfirst=True) para orden cronológico real
+        piv['Fecha_Datetime'] = pd.to_datetime(piv['Fecha_Raw'], errors='coerce', dayfirst=True)
 
-        # Extraer exactamente los 10 primeros caracteres del archivo nativo de izquierda a derecha
+        # Extraer exactamente los 10 primeros caracteres del archivo nativo de izquierda a derecha para mostrar
         def extraer_10_chars(row):
             val = row['Fecha_Raw']
             if pd.isna(val) or str(val).strip() in ["", "nan", "NaT", "None"]:
@@ -68,7 +70,7 @@ if uploaded_file is not None:
 
         piv['Fecha'] = piv.apply(extraer_10_chars, axis=1)
 
-        # Ordenamiento estricto: De más antiguo a más actual (ascendente)
+        # Ordenamiento estrictamente de menor a mayor (más antiguo arriba, ej: 29/10 antes que 05/11)
         estado_order = {"FINALIZADO": 1, "EN PROCESO": 2, "EN COLA": 3}
         piv['Orden_Estado'] = piv['Estado Vehiculo'].map(estado_order)
         piv = piv.sort_values(by=['Orden_Estado', 'Fecha_Datetime'], ascending=[True, True])
@@ -106,14 +108,4 @@ if uploaded_file is not None:
 
         # Generar Excel estructurado con 3 pestañas independientes para descarga
         output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df_fin.to_excel(writer, index=False, sheet_name='Finalizado')
-            df_proc.to_excel(writer, index=False, sheet_name='En Proceso')
-            df_cola.to_excel(writer, index=False, sheet_name='En Cola')
-
-        st.download_button(
-            label="📥 Descargar Reporte Excel Clasificado (.xlsx)",
-            data=output.getvalue(),
-            file_name="Reporte_Cliente_ALESE_Ordenado.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+        with pd.
